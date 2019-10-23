@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+if [[ "$EUID" != 0 ]]; then
+	printf "Please run as root, exiting...\n"
+	exit 1
+fi
+
+etcdir="/etc/hosts.d"
+hostsfile="/etc/hosts"
+
+_get_hosts() {
+	cat << EOF > "$etcdir/00.local.hosts"
+127.0.0.1   localhost
+127.0.1.1   $(hostname)
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+EOF
+
+	curl -s https://someonewhocares.org/hosts/zero/hosts \
+		> "$etcdir/01-zero.hosts"
+
+	curl -s "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=&showintro=1&mimetype=plaintext" \
+		> "$etcdir/02-yoyo.hosts"
+}
+
+_get_hosts
+
+[[ -e "$hostsfile" ]] && cp "$hostsfile" "$hostsfile.BAK"
+
+truncate -s 0 "$hostsfile"
+for f in "$etcdir"/*; do
+	cat "$f" >> "$hostsfile"
+done
+
+sort "$hostsfile" \
+	| sed 's/127\.0\.0\.1/0.0.0.0/' \
+	| uniq -u \
+	| grep -v "^\s*#" \
+	> "$hostsfile.tmp" \
+	&& mv "$hostsfile"{.tmp,}
+
+printf "%s file created.\n" "$hostsfile"
